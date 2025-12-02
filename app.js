@@ -399,12 +399,13 @@ function runAnalysis() {
   let knownIndices = [];
   const allParamIndices = allIndexRange(cols);
   let pairMetadata = null;
+  let linkMetadata = null;
 
   if (currentMode === MODE.STATUS) {
     knownIndices = sortedIndices(selectors.known.selected);
     targetIndices = allParamIndices.filter((idx) => !knownIndices.includes(idx));
     knownNames = knownIndices.map((idx) => paramNames[idx]);
-    report.push(`<h3>Тип задачи: определение статуса проектной задачи</h3>`);
+    report.push(`<h3>Тип задачи: определение статуса проектного модуля</h3>`);
     report.push(
       `<p><strong>Известные параметры J:</strong> ${formatList(knownNames)}</p>`
     );
@@ -417,11 +418,11 @@ function runAnalysis() {
     const tIndices = sortedIndices(selectors.t.selected);
     knownIndices = iIndices;
     knownNames = iIndices.map((idx) => paramNames[idx]);
-    targetIndices = allParamIndices.filter((idx) => !iIndices.includes(idx));
     const tNames = tIndices.map((idx) => paramNames[idx]);
     const overlapTargets = tIndices.filter((idx) => iIndices.includes(idx));
     const cleanedTargets = tIndices.filter((idx) => !iIndices.includes(idx));
-    const unknownNames = targetIndices.map((idx) => paramNames[idx]);
+    targetIndices = cleanedTargets;
+    const unknownNames = cleanedTargets.map((idx) => paramNames[idx]);
     pairMetadata = {
       requestedTargets: tNames,
       overlapNames: overlapTargets.map((idx) => paramNames[idx]),
@@ -435,7 +436,7 @@ function runAnalysis() {
       `<p><strong>Требуемые параметры T:</strong> ${formatList(tNames)}</p>`
     );
     report.push(
-      `<p><strong>Неизвестные параметры U = P \ I:</strong> ${formatList(unknownNames)}</p>`
+      `<p><strong>Неизвестные параметры T \\ I:</strong> ${formatList(unknownNames)}</p>`
     );
     if (pairMetadata.overlapNames.length) {
       report.push(
@@ -448,9 +449,12 @@ function runAnalysis() {
     const ij = sortedIndices(selectors.ij.selected);
     const ik = sortedIndices(selectors.ik.selected);
     const union = Array.from(new Set([...ij, ...ik])).sort((a, b) => a - b);
-    targetIndices = sortedIndices(selectors.analysis.selected);
     knownNames = union.map((idx) => paramNames[idx]);
-    report.push(`<h3>Тип задачи: проверка информационной связи операций</h3>`);
+    const intersection = ij.filter((idx) => ik.includes(idx));
+    linkMetadata = {
+      commonNames: intersection.map((idx) => paramNames[idx]),
+    };
+    report.push(`<h3>Тип задачи: выявление информационных связей между операциями S₁ⱼ и S₁ₖ</h3>`);
     report.push(
       `<p><strong>Входы первой операции Iij:</strong> ${formatSet(ij, paramNames)}</p>`
     );
@@ -459,9 +463,6 @@ function runAnalysis() {
     );
     report.push(
       `<p><strong>Объединение J = Iij ∪ Iik:</strong> ${formatSet(union, paramNames)}</p>`
-    );
-    report.push(
-      `<p><strong>Анализируемые параметры:</strong> ${formatSet(targetIndices, paramNames)}</p>`
     );
   } else {
     renderResultsMessage("Неизвестный режим анализа.");
@@ -474,10 +475,23 @@ function runAnalysis() {
   report.push(matrixAsciiBlock());
 
   if (!targetIndices.length) {
+    if (currentMode === MODE.LINK && linkMetadata) {
+      const conclusion = buildConclusion(currentMode, null, { link: linkMetadata });
+      report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
+      resultsView.innerHTML = report.join("");
+      return;
+    }
     const emptyMessage = currentMode === MODE.PAIR
-      ? '⚠️ Неизвестные параметры отсутствуют: все столбцы входят в I. Уберите хотя бы один параметр из I.'
+      ? '⚠️ Все параметры T уже входят в I и считаются известными. Добавьте в T новые параметры или сократите I, чтобы проверить пару.'
       : '⚠️ Не выбрано ни одного параметра для анализа. Укажите хотя бы один столбец.';
     report.push(`<p class="notice">${emptyMessage}</p>`);
+    resultsView.innerHTML = report.join("");
+    return;
+  }
+
+  if (currentMode === MODE.LINK && linkMetadata) {
+    const conclusion = buildConclusion(currentMode, null, { link: linkMetadata });
+    report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
     resultsView.innerHTML = report.join("");
     return;
   }
@@ -492,7 +506,7 @@ function runAnalysis() {
       `<p class="notice info">ℹ️ Строки ${indicesToLabels(
         zeroRows,
         "F"
-      )} не содержат анализируемых параметров и не влияют на статус задачи.</p>`
+      )} не покрывают ни один из анализируемых параметров. Их можно опустить при поиске множеств с минимальным дефицитом.</p>`
     );
   }
 
@@ -640,24 +654,25 @@ function buildConclusion(mode, statusType, context = {}) {
   }
 
   if (mode === MODE.PAIR) {
-    if (statusType === "infeasible") {
-      return "Пара (I, T) некорректна: структура модели приводит к невыполнимой постановке, расчётная схема невозможна.";
-    }
+    const overlap = context.pair?.overlapNames ?? [];
+    const overlapNote = overlap.length
+      ? ` Некоторые параметры (${formatList(overlap)}) уже входят в I и считаются заданными.`
+      : "";
     if (statusType === "calculation") {
-      const overlap = context.pair?.overlapNames ?? [];
-      const overlapNote = overlap.length
-        ? ` Некоторые параметры (${formatList(overlap)}) уже входят в I и потому считаются известными.`
-        : "";
-      return `Пара (I, T) корректна: при заданных I можно построить расчётную модель.${overlapNote}`;
+      return `Задание (I, T) корректно: T \\ I можно выразить на основе I без противоречий.${overlapNote}`;
     }
-    return "Пара (I, T) формально допустима, но задача остаётся оптимизационной и требует введения критерия.";
+    if (statusType === "infeasible") {
+      return "Задание (I, T) должно быть скорректировано: для части параметров T \\ I модель приводит к невыполнимой постановке (положительный дефицит).";
+    }
+    return "Задание (I, T) должно быть скорректировано: система для параметров T \\ I недоопределена и требует введения критерия (оптимизационная постановка).";
   }
 
   if (mode === MODE.LINK) {
-    if (statusType === "infeasible") {
-      return "Информационная связь присутствует: положительный дефицит указывает на структурную зависимость.";
+    const common = context.link?.commonNames ?? [];
+    if (common.length) {
+      return `Информационная связь присутствует. Общие параметры: ${formatList(common)}.`;
     }
-    return "Информационная связь не выявлена: дефицит нулевой для всех наборов операций.";
+    return "Информационная связь отсутствует: операции не имеют общих параметров.";
   }
 
   return "Режим не распознан.";
