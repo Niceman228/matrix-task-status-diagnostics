@@ -35,6 +35,8 @@ const RESULTS_WIDTH = { min: 240, max: 420 };
 const THEME_KEY = "deficit-app-theme";
 const themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 let userTheme = localStorage.getItem(THEME_KEY);
+const hoverState = { row: null, col: null };
+let matrixHoverRefs = null;
 
 let currentMode = MODE.STATUS;
 let matrix = createMatrix(Number(rowsInput.value), Number(colsInput.value));
@@ -258,13 +260,23 @@ function initSplitter() {
 
 function renderMatrix() {
   // Перестраиваем таблицу матрицы, чтобы отражать текущее состояние данных
+  clearMatrixHover();
+  matrixHoverRefs = null;
   const table = document.createElement("table");
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
   headRow.appendChild(document.createElement("th"));
-  parameterNames().forEach((name) => {
+  const names = parameterNames();
+  const columnHeaders = [];
+  const columnCells = Array.from({ length: names.length }, () => []);
+  const rowHeaders = [];
+  const rowElements = [];
+  names.forEach((name, idx) => {
     const th = document.createElement("th");
     th.textContent = name;
+    th.dataset.col = idx;
+    th.classList.add("col-label");
+    columnHeaders.push(th);
     headRow.appendChild(th);
   });
   thead.appendChild(headRow);
@@ -275,18 +287,26 @@ function renderMatrix() {
     const tr = document.createElement("tr");
     const rowHeader = document.createElement("th");
     rowHeader.textContent = `F${rowIdx + 1}`;
+    rowHeader.dataset.row = rowIdx;
+    rowHeader.classList.add("row-label");
+    rowHeaders.push(rowHeader);
     tr.appendChild(rowHeader);
+    rowElements.push(tr);
 
     row.forEach((value, colIdx) => {
       const td = document.createElement("td");
+      td.dataset.row = rowIdx;
+      td.dataset.col = colIdx;
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = Boolean(value);
       checkbox.addEventListener("change", () => {
         matrix[rowIdx][colIdx] = checkbox.checked ? 1 : 0;
       });
+      td.addEventListener("mouseenter", () => setMatrixHover(rowIdx, colIdx));
       td.appendChild(checkbox);
       tr.appendChild(td);
+      columnCells[colIdx]?.push(td);
     });
     tbody.appendChild(tr);
   });
@@ -294,6 +314,73 @@ function renderMatrix() {
 
   matrixTableRoot.innerHTML = "";
   matrixTableRoot.appendChild(table);
+  table.addEventListener("mouseleave", clearMatrixHover);
+  matrixHoverRefs = {
+    rowHeaders,
+    columnHeaders,
+    columnCells,
+    rowElements,
+  };
+}
+
+function setMatrixHover(rowIdx, colIdx) {
+  if (!matrixHoverRefs) {
+    return;
+  }
+  if (hoverState.row !== rowIdx) {
+    if (hoverState.row !== null) {
+      removeRowHighlight(hoverState.row);
+    }
+    if (rowIdx !== null) {
+      applyRowHighlight(rowIdx);
+    }
+    hoverState.row = rowIdx;
+  }
+  if (hoverState.col !== colIdx) {
+    if (hoverState.col !== null) {
+      removeColumnHighlight(hoverState.col);
+    }
+    if (colIdx !== null) {
+      applyColumnHighlight(colIdx);
+    }
+    hoverState.col = colIdx;
+  }
+}
+
+function clearMatrixHover() {
+  if (!matrixHoverRefs) {
+    hoverState.row = null;
+    hoverState.col = null;
+    return;
+  }
+  if (hoverState.row !== null) {
+    removeRowHighlight(hoverState.row);
+    hoverState.row = null;
+  }
+  if (hoverState.col !== null) {
+    removeColumnHighlight(hoverState.col);
+    hoverState.col = null;
+  }
+}
+
+function applyRowHighlight(rowIdx) {
+  matrixHoverRefs.rowHeaders[rowIdx]?.classList.add("is-highlighted");
+  matrixHoverRefs.rowElements[rowIdx]?.classList.add("is-row-highlight");
+}
+
+function removeRowHighlight(rowIdx) {
+  matrixHoverRefs.rowHeaders[rowIdx]?.classList.remove("is-highlighted");
+  matrixHoverRefs.rowElements[rowIdx]?.classList.remove("is-row-highlight");
+}
+
+function applyColumnHighlight(colIdx) {
+  matrixHoverRefs.columnHeaders[colIdx]?.classList.add("is-highlighted");
+  matrixHoverRefs.columnCells[colIdx]?.forEach((cell) => cell.classList.add("is-col-highlight"));
+}
+
+function removeColumnHighlight(colIdx) {
+  matrixHoverRefs.columnHeaders[colIdx]?.classList.remove("is-highlighted");
+  matrixHoverRefs.columnCells[colIdx]?.forEach((cell) => cell.classList.remove("is-col-highlight"));
 }
 
 function runAnalysis() {

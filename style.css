@@ -30,6 +30,8 @@ body {
   --results-text: #0f172a;
   --results-pre: #e5e9ff;
   --results-code: #d9e0ff;
+  --matrix-highlight: rgba(76, 110, 245, 0.18);
+  --matrix-highlight-strong: rgba(76, 110, 245, 0.3);
   --shadow-soft: 0 20px 45px rgba(34, 41, 62, 0.12);
   --shadow-strong: 0 25px 55px rgba(17, 23, 55, 0.22);
 }
@@ -55,6 +57,8 @@ body {
   --results-text: #f1f5f9;
   --results-pre: #273556;
   --results-code: #2f3d63;
+  --matrix-highlight: rgba(165, 180, 252, 0.2);
+  --matrix-highlight-strong: rgba(165, 180, 252, 0.35);
   --shadow-soft: 0 18px 35px rgba(0, 0, 0, 0.45);
   --shadow-strong: 0 25px 65px rgba(0, 0, 0, 0.65);
 }
@@ -400,6 +404,27 @@ body::before {
 
 .matrix-table tbody tr:hover {
   background: rgba(76, 110, 245, 0.08);
+}
+
+.matrix-table th.col-label,
+.matrix-table th.row-label {
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.matrix-table tr.is-row-highlight td {
+  background: var(--matrix-highlight);
+  box-shadow: inset 0 0 0 1px var(--matrix-highlight-strong);
+}
+
+.matrix-table tr.is-row-highlight th.row-label,
+.matrix-table th.col-label.is-highlighted {
+  background: var(--matrix-highlight-strong);
+  color: var(--text-primary);
+}
+
+.matrix-table td.is-col-highlight {
+  background: var(--matrix-highlight);
+  box-shadow: inset 0 0 0 1px var(--matrix-highlight-strong);
 }
 
 .matrix-table input[type="checkbox"] {
