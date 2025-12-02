@@ -497,6 +497,11 @@ body::before {
   color: #1d4ed8;
 }
 
+[data-theme="dark"] .notice.info {
+  background: rgba(59, 130, 246, 0.2);
+  color: #c7d7ff;
+}
+
 @media (max-width: 1200px) {
   .app-layout {
     flex-direction: column;
