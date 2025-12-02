@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Метод дефицита — Веб-версия</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-title">
+        <p class="title-main">Автоматическая диагностика статуса проектных задач по матрице связности</p>
+      </div>
+      <div class="header-actions">
+        <button id="resetButton" class="ghost-btn" type="button">Сбросить данные</button>
+        <button id="themeToggle" class="ghost-btn" type="button">Тёмная тема</button>
+      </div>
+    </header>
+
+    <main class="app-layout" id="splitter">
+      <section class="panel control-panel" data-pane="controls">
+        <h2>Настройки</h2>
+
+        <div class="group-box">
+          <p class="group-title">Тип задачи</p>
+          <div class="group-body">
+            <label class="radio-option">
+              <input type="radio" name="mode" value="status" checked />
+              <span>Статус проектной задачи</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="mode" value="pair" />
+              <span>Пара (I, T)</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="mode" value="link" />
+              <span>Взаимозависимость операций</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="group-box">
+          <p class="group-title">Размерность модели</p>
+          <div class="group-body dimension-controls">
+            <label>
+              <span>Операции (m):</span>
+              <input id="rowsInput" type="number" min="1" max="30" value="3" />
+            </label>
+            <label>
+              <span>Параметры (n):</span>
+              <input id="colsInput" type="number" min="1" max="30" value="6" />
+            </label>
+          </div>
+        </div>
+
+  <div id="selectorContainer" class="selector-container"></div>
+
+        <button id="analyzeButton" class="primary-btn" type="button">Анализировать</button>
+      </section>
+
+      <div class="splitter-handle" data-handle="left"></div>
+
+      <section class="panel matrix-panel" data-pane="matrix">
+        <div class="group-box fill">
+          <p class="group-title">Редактор матрицы участия (0/1)</p>
+          <div class="panel-header">
+            <p>Отметьте, какие параметры используются каждой операцией.</p>
+            <div class="table-legend">
+              <span class="legend-dot filled"></span>
+              <span>— включён параметр</span>
+            </div>
+          </div>
+          <div id="matrixTable" class="matrix-table"></div>
+        </div>
+      </section>
+
+      <div class="splitter-handle" data-handle="right"></div>
+
+      <section class="panel results-panel" data-pane="results">
+        <div class="group-box fill">
+          <p class="group-title">Результаты анализа</p>
+          <div class="results-view">
+            <div id="resultsView" class="results-content">
+              <p>Задайте матрицу и параметры, затем нажмите «Анализировать».</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">Сделано EVA с ❤️ для 609 кафедры</footer>
+
+    <template id="selectorTemplate">
+      <div class="selector-group group-box" data-selector>
+        <p class="group-title selector-title"></p>
+        <div class="group-body">
+          <span class="selector-count" data-count>0 выбрано</span>
+          <div class="selector-grid" data-grid></div>
+        </div>
+      </div>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>

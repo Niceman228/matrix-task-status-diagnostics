@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Фон -->
+  <rect x="0" y="0" width="256" height="256" rx="48" fill="#020617"></rect>
+
+  <!-- Внутренняя карточка -->
+  <rect x="40" y="40" width="176" height="176" rx="24" fill="#020617" stroke="#e5e7eb" stroke-width="4"></rect>
+
+  <!-- Матрица 3x3 -->
+  <!-- Контейнер матрицы -->
+  <rect x="56" y="64" width="120" height="120" rx="12" fill="#020617" stroke="#e5e7eb" stroke-width="3"></rect>
+
+  <!-- Вертикальные линии -->
+  <line x1="96" y1="64" x2="96" y2="184" stroke="#475569" stroke-width="2"></line>
+  <line x1="136" y1="64" x2="136" y2="184" stroke="#475569" stroke-width="2"></line>
+
+  <!-- Горизонтальные линии -->
+  <line x1="56" y1="104" x2="176" y2="104" stroke="#475569" stroke-width="2"></line>
+  <line x1="56" y1="144" x2="176" y2="144" stroke="#475569" stroke-width="2"></line>
+
+  <!-- Подсвеченные "единицы" в матрице -->
+  <!-- Верхний левый -->
+  <circle cx="76" cy="84" r="8" fill="#22c55e"></circle>
+  <!-- Центральный -->
+  <circle cx="116" cy="124" r="8" fill="#38bdf8"></circle>
+  <!-- Нижний правый -->
+  <circle cx="156" cy="164" r="8" fill="#f97316"></circle>
+
+  <!-- Правый блок статусов -->
+  <!-- Три индикатора: расчётная / оптимизационная / неразрешимая -->
+  <circle cx="200" cy="96" r="8" fill="#22c55e"></circle>
+  <circle cx="200" cy="128" r="8" fill="#38bdf8"></circle>
+  <circle cx="200" cy="160" r="8" fill="#ef4444"></circle>
+
+  <!-- Небольшой "заголовок" функции внизу: f -->
+  <text x="180" y="200" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" fill="#e5e7eb" text-anchor="middle">
+    f
+  </text>
+</svg>

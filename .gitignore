@@ -1,0 +1,14 @@
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Dependency directories
+node_modules/
+
+# Build output
+Dist/
+dist/
+build/
+
+# Env/config
+.env*
