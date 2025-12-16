@@ -303,8 +303,18 @@ function renderMatrix() {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = Boolean(value);
-      checkbox.addEventListener("change", () => {
+      const syncValue = () => {
         matrix[rowIdx][colIdx] = checkbox.checked ? 1 : 0;
+      };
+      checkbox.addEventListener("change", () => {
+        syncValue();
+      });
+      td.addEventListener("click", (event) => {
+        if (event.target === checkbox) {
+          return;
+        }
+        checkbox.checked = !checkbox.checked;
+        syncValue();
       });
       td.addEventListener("mouseenter", () => setMatrixHover(rowIdx, colIdx));
       td.appendChild(checkbox);

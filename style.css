@@ -392,6 +392,9 @@ body::before {
   border-bottom: 1px solid var(--border);
   text-align: center;
 }
+  .matrix-table td {
+    cursor: pointer;
+  }
 
 .matrix-table thead th {
   background: var(--matrix-head);
