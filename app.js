@@ -8,12 +8,15 @@ const MODE = {
 // Конфигурация селекторов формируется один раз и переиспользуется
 const selectorsConfig = [
   { key: "known", title: "Известные параметры J", modes: [MODE.STATUS] },
+  { key: "required", title: "Требуемые параметры T/τ", modes: [MODE.STATUS] },
   { key: "i", title: "Исходные параметры I", modes: [MODE.PAIR] },
   { key: "t", title: "Требуемые параметры T", modes: [MODE.PAIR] },
   { key: "ij", title: "Параметры Iij", modes: [MODE.LINK] },
   { key: "ik", title: "Параметры Iik", modes: [MODE.LINK] },
-  { key: "analysis", title: "Анализируемые параметры", modes: [MODE.LINK] },
+  { key: "analysis", title: "Параметры вне J (τ)", modes: [MODE.LINK] },
 ];
+
+const MAX_ENUM_ROWS = 15;
 
 const rowsInput = document.getElementById("rowsInput");
 const colsInput = document.getElementById("colsInput");
@@ -394,112 +397,119 @@ function runAnalysis() {
   }
 
   const report = [];
-  let targetIndices = [];
-  let knownNames = [];
-  let knownIndices = [];
   const allParamIndices = allIndexRange(cols);
+  let knownIndices = [];
+  let knownNames = [];
+  let tauRequestedIndices = [];
+  let tauEffectiveIndices = [];
+  let tauRequestedNames = [];
+  let tauEffectiveNames = [];
+  let tauOverlapNames = [];
+  let universeIndices = [];
+  let universeNames = [];
   let pairMetadata = null;
   let linkMetadata = null;
 
   if (currentMode === MODE.STATUS) {
     knownIndices = sortedIndices(selectors.known.selected);
-    targetIndices = allParamIndices.filter((idx) => !knownIndices.includes(idx));
     knownNames = knownIndices.map((idx) => paramNames[idx]);
-    report.push(`<h3>Тип задачи: определение статуса проектного модуля</h3>`);
-    report.push(
-      `<p><strong>Известные параметры J:</strong> ${formatList(knownNames)}</p>`
-    );
-    const unknownNames = targetIndices.map((idx) => paramNames[idx]);
-    report.push(
-      `<p><strong>Неизвестные параметры U:</strong> ${formatList(unknownNames)}</p>`
-    );
+    tauRequestedIndices = sortedIndices(selectors.required.selected);
+    tauRequestedNames = tauRequestedIndices.map((idx) => paramNames[idx]);
+    const overlap = tauRequestedIndices.filter((idx) => knownIndices.includes(idx));
+    tauOverlapNames = overlap.map((idx) => paramNames[idx]);
+    tauEffectiveIndices = tauRequestedIndices.filter((idx) => !knownIndices.includes(idx));
+    tauEffectiveNames = tauEffectiveIndices.map((idx) => paramNames[idx]);
+    report.push(`<h3>Тип задачи: определение статуса проектной задачи (даны J, требуется T/τ)</h3>`);
+    report.push(`<p><strong>Известные параметры J:</strong> ${formatList(knownNames)}</p>`);
+    report.push(`<p><strong>Требуемые параметры T (τ):</strong> ${formatList(tauRequestedNames)}</p>`);
+    report.push(`<p><strong>Требуемые неизвестные T \\ J:</strong> ${formatList(tauEffectiveNames)}</p>`);
+    if (tauOverlapNames.length) {
+      report.push(
+        `<p class="notice info">ℹ️ Параметры ${formatList(tauOverlapNames)} входят в J и считаются уже известными.</p>`
+      );
+    }
   } else if (currentMode === MODE.PAIR) {
     const iIndices = sortedIndices(selectors.i.selected);
     const tIndices = sortedIndices(selectors.t.selected);
     knownIndices = iIndices;
     knownNames = iIndices.map((idx) => paramNames[idx]);
-    const tNames = tIndices.map((idx) => paramNames[idx]);
-    const overlapTargets = tIndices.filter((idx) => iIndices.includes(idx));
-    const cleanedTargets = tIndices.filter((idx) => !iIndices.includes(idx));
-    targetIndices = cleanedTargets;
-    const unknownNames = cleanedTargets.map((idx) => paramNames[idx]);
+    tauRequestedIndices = tIndices;
+    tauRequestedNames = tIndices.map((idx) => paramNames[idx]);
+    const overlap = tIndices.filter((idx) => iIndices.includes(idx));
+    tauOverlapNames = overlap.map((idx) => paramNames[idx]);
+    tauEffectiveIndices = tIndices.filter((idx) => !iIndices.includes(idx));
+    tauEffectiveNames = tauEffectiveIndices.map((idx) => paramNames[idx]);
+
     pairMetadata = {
-      requestedTargets: tNames,
-      overlapNames: overlapTargets.map((idx) => paramNames[idx]),
-      effectiveTargets: cleanedTargets.map((idx) => paramNames[idx]),
+      overlapNames: tauOverlapNames,
     };
+
     report.push(`<h3>Тип задачи: анализ корректности пары (I, T)</h3>`);
-    report.push(
-      `<p><strong>Исходные параметры I:</strong> ${formatList(knownNames)}</p>`
-    );
-    report.push(
-      `<p><strong>Требуемые параметры T:</strong> ${formatList(tNames)}</p>`
-    );
-    report.push(
-      `<p><strong>Неизвестные параметры T \\ I:</strong> ${formatList(unknownNames)}</p>`
-    );
-    if (pairMetadata.overlapNames.length) {
+    report.push(`<p><strong>Исходные параметры I:</strong> ${formatList(knownNames)}</p>`);
+    report.push(`<p><strong>Требуемые параметры T:</strong> ${formatList(tauRequestedNames)}</p>`);
+    report.push(`<p><strong>Требуемые неизвестные T \\ I:</strong> ${formatList(tauEffectiveNames)}</p>`);
+    if (tauOverlapNames.length) {
       report.push(
-        `<p class="notice info">ℹ️ Параметры ${formatList(
-          pairMetadata.overlapNames
-        )} входят в I и считаются известными.</p>`
+        `<p class="notice info">ℹ️ Параметры ${formatList(tauOverlapNames)} входят в I и считаются известными.</p>`
       );
     }
   } else if (currentMode === MODE.LINK) {
     const ij = sortedIndices(selectors.ij.selected);
     const ik = sortedIndices(selectors.ik.selected);
     const union = Array.from(new Set([...ij, ...ik])).sort((a, b) => a - b);
+    knownIndices = union;
     knownNames = union.map((idx) => paramNames[idx]);
-    const intersection = ij.filter((idx) => ik.includes(idx));
+    tauRequestedIndices = sortedIndices(selectors.analysis.selected);
+    tauRequestedNames = tauRequestedIndices.map((idx) => paramNames[idx]);
+    tauEffectiveIndices = tauRequestedIndices.filter((idx) => !knownIndices.includes(idx));
+    tauEffectiveNames = tauEffectiveIndices.map((idx) => paramNames[idx]);
     linkMetadata = {
-      commonNames: intersection.map((idx) => paramNames[idx]),
+      ijNames: ij.map((idx) => paramNames[idx]),
+      ikNames: ik.map((idx) => paramNames[idx]),
+      unionNames: knownNames,
     };
-    report.push(`<h3>Тип задачи: выявление информационных связей между операциями S₁ⱼ и S₁ₖ</h3>`);
-    report.push(
-      `<p><strong>Входы первой операции Iij:</strong> ${formatSet(ij, paramNames)}</p>`
-    );
-    report.push(
-      `<p><strong>Входы второй операции Iik:</strong> ${formatSet(ik, paramNames)}</p>`
-    );
-    report.push(
-      `<p><strong>Объединение J = Iij ∪ Iik:</strong> ${formatSet(union, paramNames)}</p>`
-    );
+    report.push(`<h3>Тип задачи: выявление информационных связей между операциями S₁ⱼ и S₁ₖ (через χ(J))</h3>`);
+    report.push(`<p><strong>Входы первой операции Iij:</strong> ${formatSet(ij, paramNames)}</p>`);
+    report.push(`<p><strong>Входы второй операции Iik:</strong> ${formatSet(ik, paramNames)}</p>`);
+    report.push(`<p><strong>J = Iij ∪ Iik:</strong> ${formatSet(union, paramNames)}</p>`);
+    report.push(`<p><strong>Параметры вне J (τ):</strong> ${formatSet(tauEffectiveIndices, paramNames)}</p>`);
   } else {
     renderResultsMessage("Неизвестный режим анализа.");
     return;
   }
+
+  universeIndices = allParamIndices.filter((idx) => !knownIndices.includes(idx));
+  universeNames = universeIndices.map((idx) => paramNames[idx]);
+  report.push(`<p><strong>Полное множество неизвестных после удаления J:</strong> U = P \\ J = ${formatList(universeNames)}</p>`);
 
   report.push(
     `<p><strong>Размерность модели:</strong> m = ${rows}, n = ${cols}</p>`
   );
   report.push(matrixAsciiBlock());
 
-  if (!targetIndices.length) {
-    if (currentMode === MODE.LINK && linkMetadata) {
-      const conclusion = buildConclusion(currentMode, null, { link: linkMetadata });
-      report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
-      resultsView.innerHTML = report.join("");
-      return;
-    }
+  if (rows > MAX_ENUM_ROWS) {
+    report.push(
+      `<p class="notice">⚠️ m = ${rows} слишком велико для полного перебора подмножеств строк (2^m). Для предотвращения зависания ограничение: m ≤ ${MAX_ENUM_ROWS}. Уменьшите число операций или используйте более малую модель.</p>`
+    );
+    resultsView.innerHTML = report.join("");
+    return;
+  }
+
+  if ((currentMode === MODE.STATUS || currentMode === MODE.PAIR) && !tauEffectiveIndices.length) {
     const emptyMessage = currentMode === MODE.PAIR
-      ? '⚠️ Все параметры T уже входят в I и считаются известными. Добавьте в T новые параметры или сократите I, чтобы проверить пару.'
-      : '⚠️ Не выбрано ни одного параметра для анализа. Укажите хотя бы один столбец.';
+      ? "⚠️ Все параметры T уже входят в I и считаются известными. Добавьте в T новые параметры или сократите I, чтобы проверить пару."
+      : "⚠️ Не выбрано ни одного требуемого параметра T/τ (или все они уже входят в J). Выберите хотя бы один параметр в T.";
     report.push(`<p class="notice">${emptyMessage}</p>`);
     resultsView.innerHTML = report.join("");
     return;
   }
 
-  if (currentMode === MODE.LINK && linkMetadata) {
-    const conclusion = buildConclusion(currentMode, null, { link: linkMetadata });
-    report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
-    resultsView.innerHTML = report.join("");
-    return;
-  }
-
-  const zeroRows = matrix
-    .map((row, idx) => ({ row, idx }))
-    .filter(({ row }) => targetIndices.every((col) => row[col] === 0))
-    .map(({ idx }) => idx);
+  const zeroRows = universeIndices.length
+    ? matrix
+        .map((row, idx) => ({ row, idx }))
+        .filter(({ row }) => universeIndices.every((col) => row[col] === 0))
+        .map(({ idx }) => idx)
+    : [];
 
   if (zeroRows.length) {
     report.push(
@@ -510,7 +520,13 @@ function runAnalysis() {
     );
   }
 
-  const { maxDeficit, subsets } = enumerateDeficits(matrix, targetIndices);
+  const {
+    maxDeficit,
+    subsets,
+    zeroDeficitCoversTau,
+    zeroDeficitCoversUniverse,
+  } = enumerateDeficits(matrix, universeIndices, tauEffectiveIndices);
+
   report.push(`<p><strong>Максимальный дефицит:</strong> <code>max d(L) = ${maxDeficit}</code></p>`);
 
   if (!subsets.length) {
@@ -521,9 +537,8 @@ function runAnalysis() {
     return;
   }
 
-  const coversAll = subsets.some(
-    (info) => info.covered.length === targetIndices.length && info.deficit === 0
-  );
+  const statusType = determineStatus(maxDeficit, zeroDeficitCoversTau);
+  const chiType = determineChi(maxDeficit, zeroDeficitCoversUniverse);
 
   const subsetLines = subsets.slice(0, 10).map((info) => {
     const rowsLabel = indicesToLabels(info.rows, "F");
@@ -538,9 +553,14 @@ function runAnalysis() {
   report.push("<p><strong>Подмножества строк с максимальным дефицитом:</strong></p>");
   report.push(`<ul>${subsetLines.join("")}</ul>`);
 
-  const statusType = determineStatus(maxDeficit, coversAll);
-  const conclusion = buildConclusion(currentMode, statusType, { pair: pairMetadata });
-  report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
+  if (currentMode === MODE.LINK) {
+    report.push(`<p><strong>Состояние χ(J):</strong> <code>${chiType}</code></p>`);
+    const conclusion = buildConclusion(currentMode, null, { link: { chiType } });
+    report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
+  } else {
+    const conclusion = buildConclusion(currentMode, statusType, { pair: pairMetadata });
+    report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
+  }
 
   resultsView.innerHTML = report.join("");
 }
@@ -581,27 +601,45 @@ function centerText(text, width) {
   return ` ${" ".repeat(left)}${text}${" ".repeat(right)} `;
 }
 
-function enumerateDeficits(matrixData, parameterIndices) {
-  // Перебираем все возможные множества строк и находим те, где дефицит максимален
-  if (!matrixData.length || !parameterIndices.length) {
-    return { maxDeficit: 0, subsets: [] };
+function enumerateDeficits(matrixData, universeIndices, tauIndices = []) {
+  // По методике дефицита: d(L) = |L| - |σ(L, J)|,
+  // где σ(L, J) — множество всех переменных из U = P \ J, затронутых строками L.
+  if (!matrixData.length) {
+    return {
+      maxDeficit: 0,
+      subsets: [],
+      zeroDeficitCoversTau: false,
+      zeroDeficitCoversUniverse: universeIndices.length === 0,
+    };
   }
   const m = matrixData.length;
   let maxDeficit = -Infinity;
   const bestSubsets = [];
+  let zeroDeficitCoversTau = tauIndices.length === 0;
+  let zeroDeficitCoversUniverse = universeIndices.length === 0;
 
   const rowIndices = [...Array(m).keys()];
   for (let size = 1; size <= m; size += 1) {
     combinations(rowIndices, size).forEach((subset) => {
       const covered = new Set();
       subset.forEach((rowIdx) => {
-        parameterIndices.forEach((colIdx) => {
+        universeIndices.forEach((colIdx) => {
           if (matrixData[rowIdx][colIdx]) {
             covered.add(colIdx);
           }
         });
       });
       const deficit = subset.length - covered.size;
+
+      if (deficit === 0) {
+        if (!zeroDeficitCoversTau && tauIndices.length) {
+          zeroDeficitCoversTau = tauIndices.every((idx) => covered.has(idx));
+        }
+        if (!zeroDeficitCoversUniverse && universeIndices.length) {
+          zeroDeficitCoversUniverse = covered.size === universeIndices.length;
+        }
+      }
+
       if (deficit > maxDeficit) {
         maxDeficit = deficit;
         bestSubsets.length = 0;
@@ -611,7 +649,12 @@ function enumerateDeficits(matrixData, parameterIndices) {
       }
     });
   }
-  return { maxDeficit, subsets: bestSubsets };
+  return {
+    maxDeficit,
+    subsets: bestSubsets,
+    zeroDeficitCoversTau,
+    zeroDeficitCoversUniverse,
+  };
 }
 
 function combinations(array, k) {
@@ -632,14 +675,24 @@ function combinations(array, k) {
   return result;
 }
 
-function determineStatus(maxDeficit, coversAll) {
+function determineStatus(maxDeficit, zeroDeficitCoversTau) {
   if (maxDeficit > 0) {
     return "infeasible";
   }
-  if (coversAll) {
+  if (zeroDeficitCoversTau) {
     return "calculation";
   }
   return "optimization";
+}
+
+function determineChi(maxDeficit, zeroDeficitCoversUniverse) {
+  if (maxDeficit > 0) {
+    return "J+";
+  }
+  if (zeroDeficitCoversUniverse) {
+    return "J0";
+  }
+  return "J-";
 }
 
 function buildConclusion(mode, statusType, context = {}) {
@@ -648,9 +701,9 @@ function buildConclusion(mode, statusType, context = {}) {
       return "Задача невыполнима: дефицит положителен хотя бы для одного множества операций.";
     }
     if (statusType === "calculation") {
-      return "Задача расчётная: существует множество операций с d(L) = 0, покрывающее все неизвестные.";
+      return "Задача расчётная: существует множество операций с d(L) = 0, покрывающее все требуемые параметры T \\ J.";
     }
-    return "Задача оптимизационная: требуется критерий, так как ни одно L с d(L) = 0 не покрывает все параметры.";
+    return "Задача оптимизационная: требуется критерий, так как ни одно L с d(L) = 0 не покрывает все требуемые параметры T \\ J.";
   }
 
   if (mode === MODE.PAIR) {
@@ -668,11 +721,11 @@ function buildConclusion(mode, statusType, context = {}) {
   }
 
   if (mode === MODE.LINK) {
-    const common = context.link?.commonNames ?? [];
-    if (common.length) {
-      return `Информационная связь присутствует. Общие параметры: ${formatList(common)}.`;
+    const chiType = context.link?.chiType ?? "?";
+    if (chiType === "J+") {
+      return "Операции взаимозависимы: χ(J) = J+ (структурная противоречивость), информационная связь присутствует.";
     }
-    return "Информационная связь отсутствует: операции не имеют общих параметров.";
+    return `Операции не взаимозависимы по критерию χ(J): χ(J) = ${chiType}. Информационная связь отсутствует.`;
   }
 
   return "Режим не распознан.";
