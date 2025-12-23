@@ -12,3 +12,11 @@ build/
 
 # Env/config
 .env*
+
+/tests
+/node_modules
+/.vscode
+
+package-lock.json
+package.json
+app.module.js

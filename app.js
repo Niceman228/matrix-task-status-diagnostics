@@ -18,51 +18,139 @@ const selectorsConfig = [
 
 const MAX_ENUM_ROWS = 15;
 
-const rowsInput = document.getElementById("rowsInput");
-const colsInput = document.getElementById("colsInput");
-const matrixTableRoot = document.getElementById("matrixTable");
-const selectorContainer = document.getElementById("selectorContainer");
-const resultsView = document.getElementById("resultsView");
-const analyzeButton = document.getElementById("analyzeButton");
-const resetButton = document.getElementById("resetButton");
-const themeToggle = document.getElementById("themeToggle");
-const fixedInputsToggle = document.getElementById("fixedInputsToggle");
-const assumptionsBox = document.getElementById("assumptionsBox");
-const selectorTemplate = document.getElementById("selectorTemplate");
-const panes = {
-  controls: document.querySelector('[data-pane="controls"]'),
-  matrix: document.querySelector('[data-pane="matrix"]'),
-  results: document.querySelector('[data-pane="results"]'),
-};
-const splitterHandles = document.querySelectorAll('.splitter-handle');
+// DOM-узлы и состояние приложения.
+// Важно: этот файл импортируется тестами (Vitest/JSDOM). Поэтому все обращения к DOM
+// выполняются только после проверки, что нужные элементы реально существуют.
+let rowsInput = null;
+let colsInput = null;
+let matrixTableRoot = null;
+let selectorContainer = null;
+let resultsView = null;
+let analyzeButton = null;
+let resetButton = null;
+let themeToggle = null;
+let fixedInputsToggle = null;
+let assumptionsBox = null;
+let selectorTemplate = null;
+let panes = null;
+let splitterHandles = [];
+
 const CONTROL_WIDTH = { min: 220, max: 420 };
 const RESULTS_WIDTH = { min: 240, max: 420 };
 const THEME_KEY = "deficit-app-theme";
-const themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-let userTheme = localStorage.getItem(THEME_KEY);
+let themeMediaQuery = null;
+let userTheme = null;
 const hoverState = { row: null, col: null };
 let matrixHoverRefs = null;
 
-let currentMode = MODE.STATUS;
-let matrix = createMatrix(Number(rowsInput.value), Number(colsInput.value));
-const selectors = buildSelectors();
-applyTheme(userTheme || (themeMediaQuery.matches ? "dark" : "light"));
-
-if (!userTheme) {
-  const handleSystemTheme = (event) => {
-    if (userTheme) {
-      return;
-    }
-    applyTheme(event.matches ? "dark" : "light");
-  };
-  if (themeMediaQuery.addEventListener) {
-    themeMediaQuery.addEventListener("change", handleSystemTheme);
-  } else if (themeMediaQuery.addListener) {
-    themeMediaQuery.addListener(handleSystemTheme);
+function safeLocalStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
   }
 }
 
-init();
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // В режиме file:// или при жёстких настройках приватности доступ к storage может быть запрещён.
+  }
+}
+
+let currentMode = MODE.STATUS;
+let matrix = createMatrix(0, 0);
+let selectors = {};
+
+function bindDomRefs() {
+  rowsInput = document.getElementById("rowsInput");
+  colsInput = document.getElementById("colsInput");
+  matrixTableRoot = document.getElementById("matrixTable");
+  selectorContainer = document.getElementById("selectorContainer");
+  resultsView = document.getElementById("resultsView");
+  analyzeButton = document.getElementById("analyzeButton");
+  resetButton = document.getElementById("resetButton");
+  themeToggle = document.getElementById("themeToggle");
+  fixedInputsToggle = document.getElementById("fixedInputsToggle");
+  assumptionsBox = document.getElementById("assumptionsBox");
+  selectorTemplate = document.getElementById("selectorTemplate");
+  panes = {
+    controls: document.querySelector('[data-pane="controls"]'),
+    matrix: document.querySelector('[data-pane="matrix"]'),
+    results: document.querySelector('[data-pane="results"]'),
+  };
+  splitterHandles = Array.from(document.querySelectorAll('.splitter-handle'));
+}
+
+function hasAppDom() {
+  // Минимально необходимые элементы для запуска приложения.
+  return Boolean(
+    rowsInput &&
+      colsInput &&
+      matrixTableRoot &&
+      selectorContainer &&
+      resultsView &&
+      analyzeButton &&
+      resetButton &&
+      selectorTemplate &&
+      panes?.controls &&
+      panes?.results
+  );
+}
+
+function boot() {
+  bindDomRefs();
+  if (!hasAppDom()) {
+    return;
+  }
+
+  themeMediaQuery = typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : { matches: false };
+  userTheme = safeLocalStorageGet(THEME_KEY);
+
+  matrix = createMatrix(Number(rowsInput.value), Number(colsInput.value));
+  selectors = buildSelectors();
+  applyTheme(userTheme || (themeMediaQuery.matches ? "dark" : "light"));
+
+  if (!userTheme) {
+    const handleSystemTheme = (event) => {
+      if (userTheme) {
+        return;
+      }
+      applyTheme(event.matches ? "dark" : "light");
+    };
+    if (themeMediaQuery.addEventListener) {
+      themeMediaQuery.addEventListener("change", handleSystemTheme);
+    } else if (themeMediaQuery.addListener) {
+      themeMediaQuery.addListener(handleSystemTheme);
+    }
+  }
+
+  init();
+}
+
+function bootIfDomReady() {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+
+  const start = () => {
+    bindDomRefs();
+    if (hasAppDom()) {
+      boot();
+    }
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+}
+
+bootIfDomReady();
 
 function init() {
   // Подписываемся на все пользовательские действия (переключения режимов, размеры и т.п.)
@@ -107,7 +195,7 @@ function init() {
     themeToggle.addEventListener("click", () => {
       const nextTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
       applyTheme(nextTheme);
-      localStorage.setItem(THEME_KEY, nextTheme);
+      safeLocalStorageSet(THEME_KEY, nextTheme);
       userTheme = nextTheme;
     });
   }
@@ -491,6 +579,11 @@ function runAnalysis() {
   universeIndices = allParamIndices.filter((idx) => !knownIndices.includes(idx));
   universeNames = universeIndices.map((idx) => paramNames[idx]);
   report.push(`<p><strong>Полное множество неизвестных после удаления J:</strong> U = P \\ J = ${formatList(universeNames)}</p>`);
+  if (!universeIndices.length) {
+    report.push(
+      '<p class="notice info">ℹ️ Случай <code>U = P \\ J = ∅</code>: после удаления компонент J неизвестных параметров не остаётся. Далее метод дефицита применяется как структурная диагностика взаимозависимости внутри J (покрытие по U отсутствует).</p>'
+    );
+  }
 
   report.push(
     `<p><strong>Размерность модели:</strong> m = ${rows}, n = ${cols}</p>`
@@ -507,18 +600,13 @@ function runAnalysis() {
 
   if (currentMode === MODE.PAIR && !tauEffectiveIndices.length) {
     report.push(
-      '<p class="notice info">ℹ️ Тривиальный случай: <code>T \\ I = ∅</code> — все требуемые параметры уже заданы во входах <code>I</code>. Задание корректно, но проверка по методу дефицита не требуется.</p>'
+      '<p class="notice info">ℹ️ Тривиальный случай: <code>T \\ I = ∅</code> — все требуемые параметры уже заданы во входах <code>I</code>. Ниже всё равно вычисляется χ(J) для <code>J = I</code> (структурная диагностика по методу дефицита).</p>'
     );
-    report.push('<p><strong>Вывод:</strong> Задание (I, T) корректно: дополнительных неизвестных для вычисления нет.</p>');
-    resultsView.innerHTML = report.join("");
-    return;
   }
   if (currentMode === MODE.STATUS && !tauEffectiveIndices.length) {
     report.push(
-      '<p class="notice">⚠️ Не выбрано ни одного требуемого параметра T/τ (или все они уже входят в J). Выберите хотя бы один параметр в T.</p>'
+      '<p class="notice info">ℹ️ Для данной постановки <code>T \\ J = ∅</code> (либо T/τ не задано, либо все выбранные параметры уже входят в J). Ниже всё равно вычисляется χ(J) по методу дефицита; проверка τ‑полноты в этом случае тривиальна.</p>'
     );
-    resultsView.innerHTML = report.join("");
-    return;
   }
 
   const zeroRows = universeIndices.length
@@ -533,7 +621,7 @@ function runAnalysis() {
       `<p class="notice info">ℹ️ Строки ${indicesToLabels(
         zeroRows,
         "F"
-      )} не покрывают ни один из анализируемых параметров. Их можно опустить при поиске множеств с максимальным дефицитом.</p>`
+      )} не затрагивают множество неизвестных <code>U = P \\ J</code> (по всем столбцам из U в них стоят нули). При полном переборе они всё равно учитываются, так как могут входить в L и влиять на <code>|L|</code> и <code>d(L)</code>.</p>`
     );
   }
 
@@ -558,11 +646,11 @@ function runAnalysis() {
     return;
   }
 
-  const Lstar = pickCritical(subsets);
-  if (Lstar) {
-    const rowsLabel = indicesToLabels(Lstar.rows, "F");
-    const PofLstar = paramsOfRows(matrix, Lstar.rows);
-    const phiSt = PofLstar.filter((idx) => knownIndices.includes(idx));
+  const Lcrit = pickCritical(subsets);
+  if (Lcrit) {
+    const rowsLabel = indicesToLabels(Lcrit.rows, "F");
+    const PofL = paramsOfRows(matrix, Lcrit.rows);
+    const phiSt = PofL.filter((idx) => knownIndices.includes(idx));
 
     report.push(`<p><strong>Критическое множество:</strong> <code>L* = {${rowsLabel}}</code></p>`);
 
@@ -571,11 +659,20 @@ function runAnalysis() {
       report.push(`<p><strong>ΦSt(J+)=J ∩ P(L*):</strong> ${formatSet(phiSt, paramNames)}</p>`);
     } else if (maxDeficit < 0) {
       const lambdaSize = -maxDeficit;
-      const lambdaOne = Lstar.covered.slice(0, lambdaSize);
+      const lambdaOne = Lcrit.covered.slice(0, lambdaSize);
       report.push(`<p><strong>|Λ(J−)|:</strong> <code>${lambdaSize}</code> (минимальное дополнение до корректности)</p>`);
-      report.push(`<p><strong>Кандидаты для добавления в J (из a(L*,J)):</strong> ${formatSet(Lstar.covered, paramNames)}</p>`);
-      report.push(`<p><strong>Один вариант Λ(J−):</strong> ${formatSet(lambdaOne, paramNames)}</p>`);
+      report.push(`<p><strong>Кандидаты для добавления в J (из σ(L*,J)):</strong> ${formatSet(Lcrit.covered, paramNames)}</p>`);
+      report.push(`<p><strong>Пример варианта Λ(J−):</strong> ${formatSet(lambdaOne, paramNames)}</p>`);
     }
+
+    const LN = allIndexRange(rows);
+    const LnoDef = LN.filter((rowIdx) => !Lcrit.rows.includes(rowIdx));
+    report.push(
+      `<p><strong>Дополнение к L*:</strong> <code>L̄ = {${indicesToLabels(
+        LnoDef,
+        "F"
+      )}}</code> (<code>L̄ = LN \\ L*</code>)</p>`
+    );
   }
 
   if (maxDeficit === 0) {
@@ -586,14 +683,14 @@ function runAnalysis() {
         ? "L0 (для проверки τ)"
         : "L0 (одно из L с d(L)=0)";
       report.push(`<p><strong>${title}:</strong> <code>{${l0Label}}</code></p>`);
-      report.push(`<p><strong>a(L0,J)=σ(L0,J):</strong> ${formatSet(L0.covered, paramNames)}</p>`);
+      report.push(`<p><strong>σ(L0,J):</strong> ${formatSet(L0.covered, paramNames)}</p>`);
     }
   }
 
   const subsetLines = subsets.slice(0, 10).map((info) => {
     const rowsLabel = indicesToLabels(info.rows, "F");
-    const coveredLabel = indicesToLabels(info.covered, "P");
-    return `<li><code>L = {${rowsLabel}}</code> → <code>P(L) = {${coveredLabel}}</code>; <code>d(L) = ${info.deficit}</code></li>`;
+    const coveredSet = formatSet(info.covered, paramNames);
+    return `<li><code>L = {${rowsLabel}}</code> → <code>σ(L,J) = </code>${coveredSet}; <code>d(L) = ${info.deficit}</code></li>`;
   });
   if (subsets.length > 10) {
     subsetLines.push(
@@ -789,7 +886,7 @@ function determineStatus(maxDeficit, tauIndices, bestSubsets, options = {}) {
   }
 
   // maxDeficit === 0 ⇒ χ(J)=J0.
-  // τ-полноту считаем по a(L0, J0) для одного выбранного множества L0 с d(L)=0.
+  // τ-полноту считаем по σ(L0, J) для одного выбранного множества L0 с d(L)=0.
   const L0 = pickL0ByTau(bestSubsets, tauIndices);
   const computable = new Set(L0 ? L0.covered : []);
 
@@ -836,7 +933,7 @@ function buildConclusion(mode, statusType, context = {}) {
       return "Задача смешанная: часть требуемых параметров T \\ J определяется расчётом (существуют L с d(L)=0, покрывающие часть T), а оставшаяся часть требует оптимизации/дополнительного критерия.";
     }
     if (maxDeficit < 0) {
-      return "Система недоопределена (χ(J)=J−): требуется критерий/оптимизация.";
+      return "Система недоопределена (χ(J)=J−): постановку можно сделать корректной через дозадание минимального дополнения Λ(J−) (добавить параметры в J), а также/или через введение критерия и оптимизационную постановку.";
     }
     return "Задача оптимизационная: χ(J)=J0, но требуемые параметры T \\ J не покрыты нулевыми L полностью, поэтому нужна оптимизация.";
   }
@@ -859,7 +956,7 @@ function buildConclusion(mode, statusType, context = {}) {
       return "Задание (I, T) должно быть скорректировано: при фиксированных входах/взаимоисключающих ограничениях и χ(J)=J+ модель приводит к невыполнимой постановке (положительный дефицит).";
     }
     if (maxDeficit < 0) {
-      return `Задание (I, T) должно быть скорректировано: система недоопределена (χ(J)=J−) и требует введения критерия.${overlapNote}`;
+      return `Задание (I, T) должно быть скорректировано: система недоопределена (χ(J)=J−). Для корректности можно дозадать минимальное дополнение Λ(J−) (расширить I/J), и/или ввести критерий и рассматривать оптимизационную постановку.${overlapNote}`;
     }
     return `Задание (I, T) должно быть скорректировано: χ(J)=J0, но параметры T \\ I не покрыты нулевыми L полностью, требуется критерий.${overlapNote}`;
   }
