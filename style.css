@@ -275,6 +275,10 @@ body::before {
   display: none;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
 .selector-count {
   font-size: 0.85rem;
   color: var(--text-muted);

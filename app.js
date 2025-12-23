@@ -26,6 +26,8 @@ const resultsView = document.getElementById("resultsView");
 const analyzeButton = document.getElementById("analyzeButton");
 const resetButton = document.getElementById("resetButton");
 const themeToggle = document.getElementById("themeToggle");
+const fixedInputsToggle = document.getElementById("fixedInputsToggle");
+const assumptionsBox = document.getElementById("assumptionsBox");
 const selectorTemplate = document.getElementById("selectorTemplate");
 const panes = {
   controls: document.querySelector('[data-pane="controls"]'),
@@ -195,6 +197,10 @@ function updateSelectorVisibility() {
     const visible = selector.modes.includes(currentMode);
     selector.element.classList.toggle("hidden", !visible);
   });
+
+  if (assumptionsBox) {
+    assumptionsBox.classList.toggle("is-hidden", currentMode === MODE.LINK);
+  }
 }
 
 function resetState() {
@@ -418,7 +424,6 @@ function runAnalysis() {
   let universeIndices = [];
   let universeNames = [];
   let pairMetadata = null;
-  let linkMetadata = null;
 
   if (currentMode === MODE.STATUS) {
     knownIndices = sortedIndices(selectors.known.selected);
@@ -473,11 +478,6 @@ function runAnalysis() {
     tauRequestedNames = tauRequestedIndices.map((idx) => paramNames[idx]);
     tauEffectiveIndices = tauRequestedIndices.filter((idx) => !knownIndices.includes(idx));
     tauEffectiveNames = tauEffectiveIndices.map((idx) => paramNames[idx]);
-    linkMetadata = {
-      ijNames: ij.map((idx) => paramNames[idx]),
-      ikNames: ik.map((idx) => paramNames[idx]),
-      unionNames: knownNames,
-    };
     report.push(`<h3>Тип задачи: выявление информационных связей между операциями S₁ⱼ и S₁ₖ (через χ(J))</h3>`);
     report.push(`<p><strong>Входы первой операции Iij:</strong> ${formatSet(ij, paramNames)}</p>`);
     report.push(`<p><strong>Входы второй операции Iik:</strong> ${formatSet(ik, paramNames)}</p>`);
@@ -505,11 +505,18 @@ function runAnalysis() {
     return;
   }
 
-  if ((currentMode === MODE.STATUS || currentMode === MODE.PAIR) && !tauEffectiveIndices.length) {
-    const emptyMessage = currentMode === MODE.PAIR
-      ? "⚠️ Все параметры T уже входят в I и считаются известными. Добавьте в T новые параметры или сократите I, чтобы проверить пару."
-      : "⚠️ Не выбрано ни одного требуемого параметра T/τ (или все они уже входят в J). Выберите хотя бы один параметр в T.";
-    report.push(`<p class="notice">${emptyMessage}</p>`);
+  if (currentMode === MODE.PAIR && !tauEffectiveIndices.length) {
+    report.push(
+      '<p class="notice info">ℹ️ Тривиальный случай: <code>T \\ I = ∅</code> — все требуемые параметры уже заданы во входах <code>I</code>. Задание корректно, но проверка по методу дефицита не требуется.</p>'
+    );
+    report.push('<p><strong>Вывод:</strong> Задание (I, T) корректно: дополнительных неизвестных для вычисления нет.</p>');
+    resultsView.innerHTML = report.join("");
+    return;
+  }
+  if (currentMode === MODE.STATUS && !tauEffectiveIndices.length) {
+    report.push(
+      '<p class="notice">⚠️ Не выбрано ни одного требуемого параметра T/τ (или все они уже входят в J). Выберите хотя бы один параметр в T.</p>'
+    );
     resultsView.innerHTML = report.join("");
     return;
   }
@@ -533,10 +540,12 @@ function runAnalysis() {
   const {
     maxDeficit,
     subsets,
-  } = enumerateDeficits(matrix, universeIndices, tauEffectiveIndices);
+  } = enumerateDeficits(matrix, universeIndices);
 
-  const statusType = determineStatus(maxDeficit, tauEffectiveIndices, subsets);
   const chiType = determineChi(maxDeficit);
+  const statusType = determineStatus(maxDeficit, tauEffectiveIndices, subsets, {
+    assumeFixedInputs: Boolean(fixedInputsToggle?.checked),
+  });
 
   report.push(`<p><strong>Максимальный дефицит:</strong> <code>max d(L) = ${maxDeficit}</code></p>`);
   report.push(`<p><strong>Состояние χ(J):</strong> <code>${chiType}</code></p>`);
@@ -547,6 +556,38 @@ function runAnalysis() {
     );
     resultsView.innerHTML = report.join("");
     return;
+  }
+
+  const Lstar = pickCritical(subsets);
+  if (Lstar) {
+    const rowsLabel = indicesToLabels(Lstar.rows, "F");
+    const PofLstar = paramsOfRows(matrix, Lstar.rows);
+    const phiSt = PofLstar.filter((idx) => knownIndices.includes(idx));
+
+    report.push(`<p><strong>Критическое множество:</strong> <code>L* = {${rowsLabel}}</code></p>`);
+
+    if (maxDeficit > 0) {
+      report.push(`<p><strong>St(J+):</strong> <code>${maxDeficit}</code></p>`);
+      report.push(`<p><strong>ΦSt(J+)=J ∩ P(L*):</strong> ${formatSet(phiSt, paramNames)}</p>`);
+    } else if (maxDeficit < 0) {
+      const lambdaSize = -maxDeficit;
+      const lambdaOne = Lstar.covered.slice(0, lambdaSize);
+      report.push(`<p><strong>|Λ(J−)|:</strong> <code>${lambdaSize}</code> (минимальное дополнение до корректности)</p>`);
+      report.push(`<p><strong>Кандидаты для добавления в J (из a(L*,J)):</strong> ${formatSet(Lstar.covered, paramNames)}</p>`);
+      report.push(`<p><strong>Один вариант Λ(J−):</strong> ${formatSet(lambdaOne, paramNames)}</p>`);
+    }
+  }
+
+  if (maxDeficit === 0) {
+    const L0 = pickL0ByTau(subsets, tauEffectiveIndices);
+    if (L0) {
+      const l0Label = indicesToLabels(L0.rows, "F");
+      const title = tauEffectiveIndices.length
+        ? "L0 (для проверки τ)"
+        : "L0 (одно из L с d(L)=0)";
+      report.push(`<p><strong>${title}:</strong> <code>{${l0Label}}</code></p>`);
+      report.push(`<p><strong>a(L0,J)=σ(L0,J):</strong> ${formatSet(L0.covered, paramNames)}</p>`);
+    }
   }
 
   const subsetLines = subsets.slice(0, 10).map((info) => {
@@ -609,7 +650,7 @@ function centerText(text, width) {
   return ` ${" ".repeat(left)}${text}${" ".repeat(right)} `;
 }
 
-function enumerateDeficits(matrixData, universeIndices, tauIndices = []) {
+function enumerateDeficits(matrixData, universeIndices) {
   // По методике дефицита: d(L) = |L| - |σ(L, J)|,
   // где σ(L, J) — множество всех переменных из U = P \ J, затронутых строками L.
   if (!matrixData.length) {
@@ -668,29 +709,96 @@ function combinations(array, k) {
   return result;
 }
 
-function determineStatus(maxDeficit, tauIndices, bestSubsets) {
-  // J+ (переопределённость / структурная противоречивость)
-  if (maxDeficit > 0) {
-    return "infeasible";
+function countCoveredTau(covered, tauSet) {
+  let count = 0;
+  for (const x of covered) {
+    if (tauSet.has(x)) {
+      count += 1;
+    }
   }
-  // J- (недоопределённость)
+  return count;
+}
+
+function pickL0ByTau(zeroDeficitSubsets, tauIndices) {
+  if (!zeroDeficitSubsets.length) {
+    return null;
+  }
+  const tauSet = new Set(tauIndices);
+  return zeroDeficitSubsets.reduce((best, cur) => {
+    if (!best) {
+      return cur;
+    }
+
+    const curTau = countCoveredTau(cur.covered, tauSet);
+    const bestTau = countCoveredTau(best.covered, tauSet);
+
+    if (curTau !== bestTau) {
+      return curTau > bestTau ? cur : best;
+    }
+    if (cur.rows.length !== best.rows.length) {
+      return cur.rows.length > best.rows.length ? cur : best;
+    }
+    if (cur.covered.length !== best.covered.length) {
+      return cur.covered.length > best.covered.length ? cur : best;
+    }
+    return best;
+  }, null);
+}
+
+function pickCritical(subsets) {
+  if (!subsets.length) {
+    return null;
+  }
+  return subsets.reduce((best, cur) => {
+    if (!best) {
+      return cur;
+    }
+    if (cur.rows.length !== best.rows.length) {
+      return cur.rows.length > best.rows.length ? cur : best;
+    }
+    if (cur.covered.length !== best.covered.length) {
+      return cur.covered.length > best.covered.length ? cur : best;
+    }
+    return best;
+  }, null);
+}
+
+function paramsOfRows(matrixData, rows) {
+  const cols = new Set();
+  rows.forEach((r) => {
+    matrixData[r]?.forEach((value, c) => {
+      if (value) {
+        cols.add(c);
+      }
+    });
+  });
+  return [...cols].sort((a, b) => a - b);
+}
+
+function determineStatus(maxDeficit, tauIndices, bestSubsets, options = {}) {
+  const { assumeFixedInputs = false } = options;
+
+  if (maxDeficit > 0) {
+    // χ(J)=J+ — противоречивость/взаимозависимость компонент J.
+    // «Невыполнимо» можно утверждать только при дополнительных данных
+    // (например, фиксированные входы или взаимоисключающие ограничения).
+    return assumeFixedInputs ? "infeasible" : "contradictory";
+  }
   if (maxDeficit < 0) {
     return "optimization";
   }
 
-  // maxDeficit === 0 => J корректен (J0).
-  // Вычисляем объединение всех переменных, которые можно выразить (d(L)=0)
-  const computable = new Set();
-  bestSubsets.forEach((info) => {
-    info.covered.forEach((c) => computable.add(c));
-  });
+  // maxDeficit === 0 ⇒ χ(J)=J0.
+  // τ-полноту считаем по a(L0, J0) для одного выбранного множества L0 с d(L)=0.
+  const L0 = pickL0ByTau(bestSubsets, tauIndices);
+  const computable = new Set(L0 ? L0.covered : []);
 
   let coveredTau = 0;
-  tauIndices.forEach((t) => {
+  for (const t of tauIndices) {
     if (computable.has(t)) {
       coveredTau += 1;
     }
-  });
+  }
 
   if (coveredTau === tauIndices.length) {
     return "calculation";
@@ -715,8 +823,11 @@ function buildConclusion(mode, statusType, context = {}) {
   const { maxDeficit, chiType } = context;
 
   if (mode === MODE.STATUS) {
+    if (statusType === "contradictory") {
+      return "χ(J)=J+ (противоречивость/взаимозависимость компонент J): вывод о невыполнимости без информации о характере ограничений преждевременен. Требуется согласование/корректировка J и анализ ограничений.";
+    }
     if (statusType === "infeasible") {
-      return "Задача невыполнима (структурно противоречива J+): дефицит положителен хотя бы для одного множества операций.";
+      return "Задача невыполнима: при фиксированных входах/взаимоисключающих ограничениях и χ(J)=J+ дефицит положителен хотя бы для одного множества операций.";
     }
     if (statusType === "calculation") {
       return "Задача расчётная: существует множество операций с d(L) = 0, покрывающее все требуемые параметры T \\ J.";
@@ -741,8 +852,11 @@ function buildConclusion(mode, statusType, context = {}) {
     if (statusType === "mixed") {
       return `Задание (I, T) частично определимо: часть T \\ I выражается через I расчётно, а для оставшейся части требуется критерий/оптимизация (смешанная постановка).${overlapNote}`;
     }
+    if (statusType === "contradictory") {
+      return `Для (I, T) получено χ(J)=J+ (противоречивость/взаимозависимость компонент J=I): вывод о невыполнимости без данных о фиксированности входов/характере ограничений преждевременен. Требуется согласование/корректировка исходных предпосылок.${overlapNote}`;
+    }
     if (statusType === "infeasible") {
-      return "Задание (I, T) должно быть скорректировано: для части параметров T \\ I модель приводит к невыполнимой постановке (положительный дефицит).";
+      return "Задание (I, T) должно быть скорректировано: при фиксированных входах/взаимоисключающих ограничениях и χ(J)=J+ модель приводит к невыполнимой постановке (положительный дефицит).";
     }
     if (maxDeficit < 0) {
       return `Задание (I, T) должно быть скорректировано: система недоопределена (χ(J)=J−) и требует введения критерия.${overlapNote}`;
