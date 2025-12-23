@@ -526,18 +526,20 @@ function runAnalysis() {
       `<p class="notice info">ℹ️ Строки ${indicesToLabels(
         zeroRows,
         "F"
-      )} не покрывают ни один из анализируемых параметров. Их можно опустить при поиске множеств с минимальным дефицитом.</p>`
+      )} не покрывают ни один из анализируемых параметров. Их можно опустить при поиске множеств с максимальным дефицитом.</p>`
     );
   }
 
   const {
     maxDeficit,
     subsets,
-    zeroDeficitCoversTau,
-    zeroDeficitCoversUniverse,
   } = enumerateDeficits(matrix, universeIndices, tauEffectiveIndices);
 
+  const statusType = determineStatus(maxDeficit, tauEffectiveIndices, subsets);
+  const chiType = determineChi(maxDeficit);
+
   report.push(`<p><strong>Максимальный дефицит:</strong> <code>max d(L) = ${maxDeficit}</code></p>`);
+  report.push(`<p><strong>Состояние χ(J):</strong> <code>${chiType}</code></p>`);
 
   if (!subsets.length) {
     report.push(
@@ -546,9 +548,6 @@ function runAnalysis() {
     resultsView.innerHTML = report.join("");
     return;
   }
-
-  const statusType = determineStatus(maxDeficit, zeroDeficitCoversTau);
-  const chiType = determineChi(maxDeficit, zeroDeficitCoversUniverse);
 
   const subsetLines = subsets.slice(0, 10).map((info) => {
     const rowsLabel = indicesToLabels(info.rows, "F");
@@ -563,14 +562,13 @@ function runAnalysis() {
   report.push("<p><strong>Подмножества строк с максимальным дефицитом:</strong></p>");
   report.push(`<ul>${subsetLines.join("")}</ul>`);
 
-  if (currentMode === MODE.LINK) {
-    report.push(`<p><strong>Состояние χ(J):</strong> <code>${chiType}</code></p>`);
-    const conclusion = buildConclusion(currentMode, null, { link: { chiType } });
-    report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
-  } else {
-    const conclusion = buildConclusion(currentMode, statusType, { pair: pairMetadata });
-    report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
-  }
+  const conclusion = buildConclusion(currentMode, statusType, {
+    pair: pairMetadata,
+    link: { chiType },
+    maxDeficit,
+    chiType,
+  });
+  report.push(`<p><strong>Вывод:</strong> ${conclusion}</p>`);
 
   resultsView.innerHTML = report.join("");
 }
@@ -618,15 +616,11 @@ function enumerateDeficits(matrixData, universeIndices, tauIndices = []) {
     return {
       maxDeficit: 0,
       subsets: [],
-      zeroDeficitCoversTau: false,
-      zeroDeficitCoversUniverse: universeIndices.length === 0,
     };
   }
   const m = matrixData.length;
   let maxDeficit = -Infinity;
   const bestSubsets = [];
-  let zeroDeficitCoversTau = tauIndices.length === 0;
-  let zeroDeficitCoversUniverse = universeIndices.length === 0;
 
   const rowIndices = [...Array(m).keys()];
   for (let size = 1; size <= m; size += 1) {
@@ -641,15 +635,6 @@ function enumerateDeficits(matrixData, universeIndices, tauIndices = []) {
       });
       const deficit = subset.length - covered.size;
 
-      if (deficit === 0) {
-        if (!zeroDeficitCoversTau && tauIndices.length) {
-          zeroDeficitCoversTau = tauIndices.every((idx) => covered.has(idx));
-        }
-        if (!zeroDeficitCoversUniverse && universeIndices.length) {
-          zeroDeficitCoversUniverse = covered.size === universeIndices.length;
-        }
-      }
-
       if (deficit > maxDeficit) {
         maxDeficit = deficit;
         bestSubsets.length = 0;
@@ -662,8 +647,6 @@ function enumerateDeficits(matrixData, universeIndices, tauIndices = []) {
   return {
     maxDeficit,
     subsets: bestSubsets,
-    zeroDeficitCoversTau,
-    zeroDeficitCoversUniverse,
   };
 }
 
@@ -685,35 +668,66 @@ function combinations(array, k) {
   return result;
 }
 
-function determineStatus(maxDeficit, zeroDeficitCoversTau) {
+function determineStatus(maxDeficit, tauIndices, bestSubsets) {
+  // J+ (переопределённость / структурная противоречивость)
   if (maxDeficit > 0) {
     return "infeasible";
   }
-  if (zeroDeficitCoversTau) {
+  // J- (недоопределённость)
+  if (maxDeficit < 0) {
+    return "optimization";
+  }
+
+  // maxDeficit === 0 => J корректен (J0).
+  // Вычисляем объединение всех переменных, которые можно выразить (d(L)=0)
+  const computable = new Set();
+  bestSubsets.forEach((info) => {
+    info.covered.forEach((c) => computable.add(c));
+  });
+
+  let coveredTau = 0;
+  tauIndices.forEach((t) => {
+    if (computable.has(t)) {
+      coveredTau += 1;
+    }
+  });
+
+  if (coveredTau === tauIndices.length) {
     return "calculation";
+  }
+  if (coveredTau > 0) {
+    return "mixed";
   }
   return "optimization";
 }
 
-function determineChi(maxDeficit, zeroDeficitCoversUniverse) {
+function determineChi(maxDeficit) {
   if (maxDeficit > 0) {
     return "J+";
   }
-  if (zeroDeficitCoversUniverse) {
+  if (maxDeficit === 0) {
     return "J0";
   }
   return "J-";
 }
 
 function buildConclusion(mode, statusType, context = {}) {
+  const { maxDeficit, chiType } = context;
+
   if (mode === MODE.STATUS) {
     if (statusType === "infeasible") {
-      return "Задача невыполнима: дефицит положителен хотя бы для одного множества операций.";
+      return "Задача невыполнима (структурно противоречива J+): дефицит положителен хотя бы для одного множества операций.";
     }
     if (statusType === "calculation") {
       return "Задача расчётная: существует множество операций с d(L) = 0, покрывающее все требуемые параметры T \\ J.";
     }
-    return "Задача оптимизационная: требуется критерий, так как ни одно L с d(L) = 0 не покрывает все требуемые параметры T \\ J.";
+    if (statusType === "mixed") {
+      return "Задача смешанная: часть требуемых параметров T \\ J определяется расчётом (существуют L с d(L)=0, покрывающие часть T), а оставшаяся часть требует оптимизации/дополнительного критерия.";
+    }
+    if (maxDeficit < 0) {
+      return "Система недоопределена (χ(J)=J−): требуется критерий/оптимизация.";
+    }
+    return "Задача оптимизационная: χ(J)=J0, но требуемые параметры T \\ J не покрыты нулевыми L полностью, поэтому нужна оптимизация.";
   }
 
   if (mode === MODE.PAIR) {
@@ -724,14 +738,19 @@ function buildConclusion(mode, statusType, context = {}) {
     if (statusType === "calculation") {
       return `Задание (I, T) корректно: T \\ I можно выразить на основе I без противоречий.${overlapNote}`;
     }
+    if (statusType === "mixed") {
+      return `Задание (I, T) частично определимо: часть T \\ I выражается через I расчётно, а для оставшейся части требуется критерий/оптимизация (смешанная постановка).${overlapNote}`;
+    }
     if (statusType === "infeasible") {
       return "Задание (I, T) должно быть скорректировано: для части параметров T \\ I модель приводит к невыполнимой постановке (положительный дефицит).";
     }
-    return "Задание (I, T) должно быть скорректировано: система для параметров T \\ I недоопределена и требует введения критерия (оптимизационная постановка).";
+    if (maxDeficit < 0) {
+      return `Задание (I, T) должно быть скорректировано: система недоопределена (χ(J)=J−) и требует введения критерия.${overlapNote}`;
+    }
+    return `Задание (I, T) должно быть скорректировано: χ(J)=J0, но параметры T \\ I не покрыты нулевыми L полностью, требуется критерий.${overlapNote}`;
   }
 
   if (mode === MODE.LINK) {
-    const chiType = context.link?.chiType ?? "?";
     if (chiType === "J+") {
       return "Операции взаимозависимы: χ(J) = J+ (структурная противоречивость), информационная связь присутствует.";
     }
